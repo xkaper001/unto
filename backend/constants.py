@@ -83,21 +83,21 @@ def ws_after_hook(plan: Plan, plan_run: PlanRun, step: Step, output: Output):
             state_for_original["plan_run_id"] = original_plan_id
             ws_after_hook.plan_state_store[original_plan_id] = state_for_original
         
-        # Notify WebSocket clients - this needs to be async, so we'll use asyncio
-        import asyncio
+        # Notify WebSocket clients using the queue-based approach
         try:
-            # Try to get the current event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're in an async context, create a task
-                asyncio.create_task(ws_after_hook.notify_function(plan_run.id, state))
-            else:
-                # If not, run it synchronously (shouldn't happen in FastAPI)
-                loop.run_until_complete(ws_after_hook.notify_function(plan_run.id, state))
+            # Call the notify function directly (it will queue the message)
+            ws_after_hook.notify_function(plan_run.id, state)
+            
+            # Also notify with original plan ID if it exists
+            if original_plan_id:
+                state_for_original = state.copy()
+                state_for_original["plan_run_id"] = original_plan_id
+                ws_after_hook.notify_function(original_plan_id, state_for_original)
+                
         except Exception as e:
             print(f"Error in WebSocket notification: {e}")
         
-        print(f"Sent WebSocket update: step {step_index}, state: {state['state']}")
+        print(f"Queued WebSocket update: step {step_index}, state: {state['state']}")
 
 myPortia = Portia(
     config=google_config,

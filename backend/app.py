@@ -4,13 +4,36 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import uuid
+import threading
 from typing import Dict, List
+from contextlib import asynccontextmanager
 
 from portia import PlanRun
 from plans import travel_plan
 from constants import ws_after_hook
 
-app = FastAPI()
+# Global queue for WebSocket state changes - needs to be created in async context
+websocket_queue = None
+websocket_processor_task = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    global websocket_queue, websocket_processor_task
+    websocket_queue = asyncio.Queue()
+    websocket_processor_task = asyncio.create_task(websocket_message_processor())
+    print("WebSocket message processor started")
+    yield
+    # Shutdown
+    if websocket_processor_task:
+        websocket_processor_task.cancel()
+        try:
+            await websocket_processor_task
+        except asyncio.CancelledError:
+            pass
+    print("WebSocket message processor stopped")
+
+app = FastAPI(lifespan=lifespan)
 
 # Allow CORS for local dev
 app.add_middleware(
@@ -48,8 +71,54 @@ def serialize_output(output):
 	except Exception:
 		return str(output)
 
-async def notify_state_change(plan_run_id: str, state: dict):
-	"""Notify all websocket clients about state change for a plan run."""
+def serialize_output(output):
+	"""Safely serialize output objects, handling complex Portia types."""
+	try:
+		if hasattr(output, '__dict__'):
+			# Try to serialize the dict, handling nested objects
+			result = {}
+			for key, value in output.__dict__.items():
+				try:
+					# Test if value is JSON serializable
+					import json
+					json.dumps(value)
+					result[key] = value
+				except (TypeError, ValueError):
+					# If not serializable, convert to string
+					result[key] = str(value)
+			return result
+		else:
+			return str(output)
+	except Exception:
+		return str(output)
+
+async def websocket_message_processor():
+	"""Background task to process WebSocket messages from the queue."""
+	global websocket_queue
+	print("WebSocket message processor started")
+	
+	while True:
+		try:
+			# Wait for a message from the queue
+			message = await websocket_queue.get()
+			plan_run_id = message.get("plan_run_id")
+			state = message.get("state")
+			
+			if plan_run_id and state:
+				await send_state_to_websockets(plan_run_id, state)
+			
+			# Mark the task as done
+			websocket_queue.task_done()
+			
+		except asyncio.CancelledError:
+			print("WebSocket message processor cancelled")
+			break
+		except Exception as e:
+			print(f"Error in WebSocket message processor: {e}")
+			# Continue processing other messages
+
+async def send_state_to_websockets(plan_run_id: str, state: dict):
+	"""Send state update to all WebSocket connections for a plan."""
 	# Check both the original plan ID and the mapped Portia plan run ID
 	all_connections = []
 	
@@ -68,7 +137,7 @@ async def notify_state_change(plan_run_id: str, state: dict):
 		orig_connections = active_connections.get(original_plan_id, [])
 		all_connections.extend(orig_connections)
 	
-	print(f"Notifying {len(all_connections)} connections for plan {plan_run_id} (original: {original_plan_id}) with state: {state.get('state', 'UNKNOWN')}")
+	print(f"Sending to {len(all_connections)} WebSocket connections for plan {plan_run_id} (original: {original_plan_id})")
 	
 	# Serialize the state to ensure it's JSON-safe
 	safe_state = {
@@ -84,10 +153,11 @@ async def notify_state_change(plan_run_id: str, state: dict):
 	if "error" in state:
 		safe_state["error"] = str(state["error"])
 	
+	# Send to all connections
 	for ws in all_connections[:]:  # Copy list to avoid modification during iteration
 		try:
 			await ws.send_json(safe_state)
-			print(f"Sent state update to WebSocket connection for plan {plan_run_id}")
+			print(f"Sent real-time state update to WebSocket for plan {plan_run_id}: {state.get('state', 'UNKNOWN')}")
 		except Exception as e:
 			print(f"Error sending to WebSocket: {e}")
 			# Remove dead connections from all relevant lists
@@ -96,8 +166,38 @@ async def notify_state_change(plan_run_id: str, state: dict):
 					conn_list.remove(ws)
 					print(f"Removed dead WebSocket connection")
 
+def queue_state_change(plan_run_id: str, state: dict):
+	"""Queue a state change message for async processing."""
+	global websocket_queue
+	
+	if websocket_queue is None:
+		print("WebSocket queue not initialized yet")
+		return
+	
+	try:
+		# Put the message in the queue (thread-safe, non-blocking)
+		message = {
+			"plan_run_id": plan_run_id,
+			"state": state
+		}
+		
+		# Use put_nowait for non-blocking operation from sync context
+		websocket_queue.put_nowait(message)
+		print(f"Queued WebSocket state change for plan {plan_run_id}: {state.get('state', 'UNKNOWN')}")
+		
+	except asyncio.QueueFull:
+		print(f"WebSocket queue is full, dropping message for plan {plan_run_id}")
+	except Exception as e:
+		print(f"Error queuing WebSocket message: {e}")
+
+# Legacy function for backward compatibility - now uses queue
+async def notify_state_change(plan_run_id: str, state: dict):
+	"""Legacy notify function - now queues the message for processing."""
+	queue_state_change(plan_run_id, state)
+
 # Set the notify function and state store to avoid circular imports
-ws_after_hook.notify_function = notify_state_change
+# Use the queue-based approach instead of direct async calls
+ws_after_hook.notify_function = queue_state_change  # Changed from notify_state_change
 ws_after_hook.plan_state_store = plan_state_store
 ws_after_hook.plan_id_mapping = plan_id_mapping
 
@@ -112,7 +212,7 @@ async def execute_plan_async(plan_run_id: str, form_data: dict):
 			"outputs": {},
 		}
 		plan_state_store[plan_run_id] = state
-		await notify_state_change(plan_run_id, state)
+		queue_state_change(plan_run_id, state)  # Use queue instead of notify_state_change
 		
 		# Wait a moment for WebSocket connections to establish
 		print(f"Waiting for WebSocket connections for plan {plan_run_id}...")
@@ -146,7 +246,7 @@ async def execute_plan_async(plan_run_id: str, form_data: dict):
 				"final_output": serialize_output(result.outputs.final_output if hasattr(result.outputs, 'final_output') else result.outputs),
 			}
 			plan_state_store[plan_run_id] = final_state
-			await notify_state_change(plan_run_id, final_state)
+			queue_state_change(plan_run_id, final_state)  # Use queue instead of notify_state_change
 		
 	except Exception as e:
 		print(f"Error in execute_plan_async: {e}")
@@ -158,7 +258,7 @@ async def execute_plan_async(plan_run_id: str, form_data: dict):
 			"error": str(e),
 		}
 		plan_state_store[plan_run_id] = error_state
-		await notify_state_change(plan_run_id, error_state)
+		queue_state_change(plan_run_id, error_state)  # Use queue instead of notify_state_change
 
 @app.websocket("/ws/plan/{plan_run_id}")
 async def websocket_plan_state(websocket: WebSocket, plan_run_id: str):
