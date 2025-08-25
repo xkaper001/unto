@@ -15,7 +15,7 @@ models = GenerativeModelsConfig(
         default_model="google/gemini-2.5-flash",
         introspection_model="google/gemini-2.5-flash",
         planning_model="google/gemini-2.5-flash",
-        summarizer_model="google/gemini-2.5-flash",
+        summarizer_model="google/gemini-2.5-pro",
 )
 
 google_config = Config.from_default(
