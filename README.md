@@ -40,6 +40,9 @@ Unto consists of two main components:
 - API Keys:
   - Google Gemini API key for AI models
   - Apify API token for flight/hotel search
+  - Portia AI API Key
+
+<img width="561" height="1105" alt="Capture-2025-08-26-000354" src="https://github.com/user-attachments/assets/84f927ca-9619-4f5c-a951-712731d188ae" />
 
 ### Environment Setup
 
