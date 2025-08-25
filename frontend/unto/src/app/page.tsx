@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -121,117 +121,171 @@ export default function TravelPlannerPage() {
     passengers: 1,
   })
   const [planState, setPlanState] = useState<PlanState | null>(null)
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // Track polling state to prevent race conditions
+  const isPollingRef = useRef(false)
+  const currentPlanIdRef = useRef<string | null>(null)
 
-  // Add logging whenever planState changes
-  useEffect(() => {
-    if (planState) {
-      console.log("🔄 Plan state updated:", planState)
-      console.log("📊 Current plan state summary:", {
-        id: planState.plan_run_id,
-        state: planState.state,
-        step: planState.current_step_index,
-        hasOutputs: !!planState.outputs,
-        hasFinalOutput: !!planState.final_output,
-        hasError: !!planState.error
-      })
+  // Memoize computed progress percentage
+  const progressPercent = useMemo(() => `${Math.min((currentStep / (steps.length - 2)) * 100, 100)}%`, [currentStep])
+
+  // Optimized summary calculation with better dependency tracking
+  const summaryMarkdown = useMemo(() => {
+    if (!planState?.final_output) {
+      return ''
     }
-  }, [planState])
+    
+    // Extract summary from final_output if available
+    if (typeof planState.final_output === 'object' && planState.final_output !== null && 'summary' in planState.final_output) {
+      return (planState.final_output as { summary: string }).summary
+    }
+    
+    // Cache the travel data parsing to avoid re-parsing on every render
+    let travelData: TravelData | null = null
+    
+    try {
+      if (typeof planState.final_output === 'string') {
+        travelData = JSON.parse(planState.final_output)
+      } else if (planState.final_output && typeof planState.final_output === 'object' && 'value' in planState.final_output) {
+        const finalOutput = planState.final_output as { value: unknown }
+        if (typeof finalOutput.value === 'string') {
+          travelData = JSON.parse(finalOutput.value)
+        } else {
+          travelData = finalOutput.value as TravelData
+        }
+      } else {
+        travelData = planState.final_output as TravelData
+      }
+    } catch {
+      return jsonToMarkdown(planState.final_output)
+    }
+    
+    if (!travelData) return ''
+    
+    // Build summary more efficiently
+    const summaryParts: string[] = ["## Travel Plan Overview\n"]
+    
+    if (travelData.departureFlight) {
+      summaryParts.push(
+        `**Departure Flight:** ${travelData.departureFlight.Airline}`,
+        `- Date: ${new Date(travelData.departureFlight.departTime).toLocaleDateString()}`,
+        `- Price: ₹${travelData.departureFlight.price?.toLocaleString()}\n`
+      )
+    }
+    
+    if (travelData.returnFlight) {
+      summaryParts.push(
+        `**Return Flight:** ${travelData.returnFlight.Airline}`,
+        `- Date: ${new Date(travelData.returnFlight.departTime).toLocaleDateString()}`,
+        `- Price: ₹${travelData.returnFlight.price?.toLocaleString()}\n`
+      )
+    }
+    
+    if (travelData.accommodation) {
+      summaryParts.push(
+        `**Accommodation:** ${travelData.accommodation.HotelName}`,
+        `- Location: ${travelData.accommodation.exact_location}`,
+        `- Duration: ${new Date(travelData.accommodation.checkInTime).toLocaleDateString()} - ${new Date(travelData.accommodation.checkOutTime).toLocaleDateString()}`,
+        `- Price: ₹${travelData.accommodation.price?.toLocaleString()}\n`
+      )
+    }
+    
+    const total = (travelData.departureFlight?.price || 0) + (travelData.returnFlight?.price || 0) + (travelData.accommodation?.price || 0)
+    summaryParts.push(`**Total Trip Cost:** ₹${total.toLocaleString()}`)
+    
+    return summaryParts.join('\n')
+  }, [planState?.final_output])
 
   // Polling function to check plan state
-  const pollPlanState = async (planRunId: string) => {
+  const pollPlanState = useCallback(async (planRunId: string) => {
+    // Prevent race conditions by checking if we're already polling this plan
+    if (isPollingRef.current || currentPlanIdRef.current !== planRunId) {
+      return
+    }
+
+    isPollingRef.current = true
+
     try {
-      console.log("🔍 Polling plan state for:", planRunId)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/plan/${planRunId}/state`)
       
       if (!response.ok) {
         if (response.status === 404) {
-          console.error("❌ Plan not found:", planRunId)
+          console.warn("Plan not found:", planRunId)
           return
         }
-        console.error("❌ Failed to fetch plan state:", response.status)
+        console.warn("Failed to fetch plan state:", response.status)
         return
       }
 
       const state = await response.json()
-      console.log("📊 Received plan state from polling:", state)
       
-      // Log additional status information
-      if (state.status_message) {
-        console.log("📝 Status message:", state.status_message)
-      }
-      
-      // Log step outputs in detail if they exist
-      if (state.outputs?.final_output && typeof state.outputs.final_output === 'object') {
-        console.log("📋 Step outputs breakdown:")
-        Object.entries(state.outputs.final_output as Record<string, unknown>).forEach(([key, value], index) => {
-          console.log(`  Step ${index + 1} (${key}):`, value)
+      // Only update state if this is still the current plan
+      if (currentPlanIdRef.current === planRunId) {
+        setPlanState((prev) => {
+          if (!prev) return state
           
-          // Try to parse nested JSON strings with proper type checking
-          if (value && typeof value === 'object' && value !== null && 'value' in value) {
-            const stepOutput = value as Record<string, unknown>
-            if (stepOutput.value && typeof stepOutput.value === 'string') {
-              try {
-                const parsedValue = JSON.parse(stepOutput.value)
-                console.log(`  Step ${index + 1} parsed value:`, parsedValue)
-              } catch {
-                console.log(`  Step ${index + 1} value (string):`, stepOutput.value)
-              }
-            }
-          }
+          // Use a more efficient comparison
+          const hasChanged = 
+            prev.state !== state.state ||
+            prev.current_step_index !== state.current_step_index ||
+            prev.final_output !== state.final_output ||
+            (prev.outputs !== state.outputs && JSON.stringify(prev.outputs) !== JSON.stringify(state.outputs))
+          
+          return hasChanged ? state : prev
         })
-      }
-      
-      setPlanState(state)
 
-      // Stop polling if plan is complete or failed
-      if (state.state === "COMPLETE" || state.state === "FAILED") {
-        console.log("🎯 Plan completed, stopping polling. Final state:", state.state)
-        if (state.status_message) {
-          console.log("📝 Final status:", state.status_message)
+        // Stop polling if plan is complete or failed
+        if (state.state === "COMPLETE" || state.state === "FAILED") {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current)
+            pollingIntervalRef.current = null
+          }
+          currentPlanIdRef.current = null
+          setCurrentStep(4) // Move to results step
         }
-        
-        if (pollingInterval) {
-          clearInterval(pollingInterval)
-          setPollingInterval(null)
-        }
-        setCurrentStep(4) // Move to results step
-      } else if (state.state === "IN_PROGRESS") {
-        console.log("⏳ Plan still in progress, current step:", state.current_step_index + 1)
       }
     } catch (error) {
-      console.error("❌ Error polling plan state:", error)
+      console.error("Error polling plan state:", error)
+    } finally {
+      isPollingRef.current = false
     }
-  }
+  }, [])
 
   // Start polling when we have a plan run ID
-  const startPolling = (planRunId: string) => {
-    console.log("⏰ Starting polling for plan:", planRunId)
-    
-    // Clear any existing interval
-    if (pollingInterval) {
-      clearInterval(pollingInterval)
+  const startPolling = useCallback((planRunId: string) => {
+    // Clear any existing interval and reset state
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
     }
+    
+    // Set the current plan ID for race condition prevention
+    currentPlanIdRef.current = planRunId
+    isPollingRef.current = false
 
     // Poll immediately
     pollPlanState(planRunId)
 
+    // Set up interval polling every 15 seconds (reduced from 20s for better UX)
     const interval = setInterval(() => {
       pollPlanState(planRunId)
-    }, 20000)
+    }, 15000)
 
-    setPollingInterval(interval)
-  }
+    pollingIntervalRef.current = interval
+  }, [pollPlanState])
 
   // Cleanup polling on component unmount
   useEffect(() => {
     return () => {
-      if (pollingInterval) {
-        console.log("🧹 Cleaning up polling interval")
-        clearInterval(pollingInterval)
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
       }
+      currentPlanIdRef.current = null
+      isPollingRef.current = false
     }
-  }, [pollingInterval])
+  }, [])
 
   const nextStep = () => {
     if (currentStep < steps.length - 1) {
@@ -253,9 +307,6 @@ export default function TravelPlannerPage() {
         return_date: formData.return_date,
       }
 
-      console.log("🚀 Starting planning with form data:", formData)
-      console.log("🔄 Processed form data:", processedFormData)
-
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/plan/start`, {
         method: "POST",
         headers: {
@@ -264,38 +315,29 @@ export default function TravelPlannerPage() {
         body: JSON.stringify(processedFormData),
       })
 
-      console.log("📡 API Response status:", response.status)
-      console.log("📡 API Response headers:", Object.fromEntries(response.headers.entries()))
-
       if (!response.ok) {
         const errorText = await response.text()
-        console.error("❌ API Error response:", errorText)
+        console.error("Failed to start planning:", errorText)
         throw new Error("Failed to start planning")
       }
 
       const initialState = await response.json()
-      console.log("✅ Initial state received:", initialState)
       setPlanState(initialState)
 
-      // Start polling for state updates instead of WebSocket
+      // Start polling for state updates
       startPolling(initialState.plan_run_id)
 
       setCurrentStep(3) // Move to processing step
     } catch (error) {
-      console.error("❌ Error starting plan:", error)
-      console.error("📊 Error details:", {
-        message: error instanceof Error ? error.message : String(error),
-        formData: formData,
-        timestamp: new Date().toISOString()
-      })
+      console.error("Error starting plan:", error)
     }
   }
 
-  const renderStep = () => {
+  const renderStep = useMemo(() => {
     switch (currentStep) {
       case 0:
         return (
-          <motion.div
+          <motion.div key="step-0"
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -50 }}
@@ -312,7 +354,7 @@ export default function TravelPlannerPage() {
                 <MapPin className="w-8 h-8 text-primary" />
               </motion.div>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Where we droppin'?
+                Where we droppin&apos;?
               </h1>
               <p className="text-lg text-muted-foreground/80">Spill the tea on your departure and destination cities bestie</p>
             </div>
@@ -358,7 +400,7 @@ export default function TravelPlannerPage() {
                 size="lg"
                 className="bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 text-white px-8 py-3 rounded-full transition-all duration-300 disabled:opacity-50"
               >
-                Let's gooo! <ArrowRight className="ml-2 w-5 h-5" />
+                Let&apos;s gooo! <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
             </motion.div>
           </motion.div>
@@ -366,7 +408,7 @@ export default function TravelPlannerPage() {
 
       case 1:
         return (
-          <motion.div
+          <motion.div key="step-1"
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -50 }}
@@ -383,7 +425,7 @@ export default function TravelPlannerPage() {
                 <Calendar className="w-8 h-8 text-primary" />
               </motion.div>
               <h2 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                When we jettin'?
+                When we jettin&apos;?
               </h2>
               <p className="text-lg text-muted-foreground/80">
                 Drop your dates bestie - you can be like &quot;2 weeks later&quot; or get specific
@@ -397,7 +439,7 @@ export default function TravelPlannerPage() {
                 className="space-y-3"
               >
                 <label className="text-sm font-medium text-muted-foreground/60 uppercase tracking-wider">
-                  When we leavin'?
+                  When we leavin&apos;?
                 </label>
                 <Input
                   placeholder="e.g., 2 weeks later, March 15, 2025-03-15"
@@ -413,7 +455,7 @@ export default function TravelPlannerPage() {
                 className="space-y-3"
               >
                 <label className="text-sm font-medium text-muted-foreground/60 uppercase tracking-wider">
-                  When we comin' back?
+                  When we comin&apos; back?
                 </label>
                 <Input
                   placeholder="e.g., 3 weeks later, March 22, 2025-03-22"
@@ -438,7 +480,7 @@ export default function TravelPlannerPage() {
                 size="lg"
                 className="flex-1 bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 text-white rounded-full transition-all duration-300"
               >
-                Bet, let's continue <ArrowRight className="ml-2 w-5 h-5" />
+                Bet, let&apos;s continue <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
             </motion.div>
           </motion.div>
@@ -446,7 +488,7 @@ export default function TravelPlannerPage() {
 
       case 2:
         return (
-          <motion.div
+          <motion.div key="step-2"
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -50 }}
@@ -463,7 +505,7 @@ export default function TravelPlannerPage() {
                 <Plane className="w-8 h-8 text-primary" />
               </motion.div>
               <h2 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                What's the vibe check?
+                What&apos;s the vibe check?
               </h2>
               <p className="text-lg text-muted-foreground/80">Pick your cabin class and squad size fr</p>
             </div>
@@ -475,7 +517,7 @@ export default function TravelPlannerPage() {
                 className="space-y-3"
               >
                 <label className="text-sm font-medium text-muted-foreground/60 uppercase tracking-wider">
-                  How we flyin'?
+                  How we flyin&apos;?
                 </label>
                 <Select
                   value={formData.cabin_class}
@@ -540,7 +582,7 @@ export default function TravelPlannerPage() {
 
       case 3:
         return (
-          <motion.div
+          <motion.div key="step-3"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5 }}
@@ -548,14 +590,23 @@ export default function TravelPlannerPage() {
           >
             <div className="space-y-6">
               <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                animate={{ 
+                  scale: [1, 1.1, 1],
+                  rotate: [0, 5, -5, 0]
+                }}
+                transition={{ 
+                  duration: 2, 
+                  repeat: Number.POSITIVE_INFINITY, 
+                  ease: "easeInOut",
+                  repeatType: "reverse"
+                }}
+                style={{ willChange: "transform" }}
                 className="mx-auto w-20 h-20 bg-gradient-to-br from-primary/20 to-purple-500/20 rounded-full flex items-center justify-center backdrop-blur-sm"
               >
-                <Loader2 className="w-10 h-10 text-primary" />
+                <span className="text-4xl">🤔</span>
               </motion.div>
               <h2 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Hold up, we're cookin' something fire 🔥
+                Hold up, we&apos;re cookin&apos; something fire 🔥
               </h2>
               <p className="text-lg text-muted-foreground/80">
                 Our AI is out here finding the most elite flights and stays...
@@ -568,7 +619,7 @@ export default function TravelPlannerPage() {
                 </div>
                 {planState.state === "IN_PROGRESS" && (
                   <div className="text-sm text-muted-foreground/60">
-                    Step {planState.current_step_index + 1} - Still cookin'... 👨‍🍳
+                    Step {planState.current_step_index + 1} - Still cookin&apos;... 👨‍🍳
                   </div>
                 )}
               </motion.div>
@@ -578,7 +629,7 @@ export default function TravelPlannerPage() {
 
       case 4:
         return (
-          <motion.div
+          <motion.div key="step-4"
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
@@ -952,7 +1003,7 @@ export default function TravelPlannerPage() {
 
             {planState?.state === "FAILED" && (
               <div className="p-6 bg-gradient-to-br from-red-500/10 to-red-600/5 backdrop-blur-sm rounded-2xl border border-red-500/20">
-                <h3 className="text-xl font-semibold text-red-400 mb-2">Oop, that's not it chief 💀</h3>
+                <h3 className="text-xl font-semibold text-red-400 mb-2">Oop, that&apos;s not it chief 💀</h3>
                 <p className="text-muted-foreground">
                   {planState.error || "Something went wrong while we were cooking your trip 😔"}
                 </p>
@@ -962,9 +1013,9 @@ export default function TravelPlannerPage() {
             <Button
               onClick={() => {
                 // Clean up polling when starting over
-                if (pollingInterval) {
-                  clearInterval(pollingInterval)
-                  setPollingInterval(null)
+                if (pollingIntervalRef.current) {
+                  clearInterval(pollingIntervalRef.current)
+                  pollingIntervalRef.current = null
                 }
                 
                 setCurrentStep(0)
@@ -988,7 +1039,7 @@ export default function TravelPlannerPage() {
       default:
         return null
     }
-  }
+  }, [currentStep, formData, planState, startPlanning, nextStep, prevStep])
 
   return (
     <div className="min-h-screen gradient-bg flex flex-col items-center justify-center p-4">
@@ -1013,14 +1064,14 @@ export default function TravelPlannerPage() {
         {/* Progress indicator */}
         <div className="mb-12">
           <div className="flex justify-between items-center mb-6">
-            {steps.slice(0, -1).map((step, index) => {
+    {steps.slice(0, -1).map((step, index) => {
               const Icon = step.icon
               return (
                 <motion.div
                   key={step.id}
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: index * 0.1 }}
+      initial={false}
+      animate={{ scale: index <= currentStep ? 1 : 1 }}
+      transition={{ duration: 0.2 }}
                   className={cn(
                     "flex items-center justify-center w-12 h-12 rounded-full transition-all duration-500 backdrop-blur-sm",
                     index <= currentStep
@@ -1036,15 +1087,17 @@ export default function TravelPlannerPage() {
           <div className="w-full bg-muted/20 rounded-full h-1 backdrop-blur-sm">
             <motion.div
               className="bg-gradient-to-r from-primary to-purple-500 h-1 rounded-full shadow-lg shadow-primary/25"
-              initial={{ width: 0 }}
-              animate={{ width: `${Math.min((currentStep / (steps.length - 2)) * 100, 100)}%` }}
-              transition={{ duration: 0.8, ease: "easeInOut" }}
+              initial={false}
+              animate={{ width: progressPercent }}
+              transition={{ duration: 0.3, ease: "linear" }}
             />
           </div>
         </div>
 
         <div className="backdrop-blur-sm bg-background/5 rounded-3xl p-12 border border-white/10 shadow-2xl">
-          <AnimatePresence mode="wait">{renderStep()}</AnimatePresence>
+          <AnimatePresence mode="wait" initial={false}>
+            {renderStep}
+          </AnimatePresence>
         </div>
 
         {/* Footer with branding */}
