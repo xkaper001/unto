@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plane, MapPin, Calendar, Users, Sparkles, ArrowRight, Loader2 } from "lucide-react"
+import { Plane, MapPin, Calendar, Users, Sparkles, ArrowRight, Loader2, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import ReactMarkdown from 'react-markdown'
 
@@ -216,10 +216,9 @@ export default function TravelPlannerPage() {
     // Poll immediately
     pollPlanState(planRunId)
 
-    // Set up polling every 7-8 seconds (using 7500ms = 7.5 seconds)
     const interval = setInterval(() => {
       pollPlanState(planRunId)
-    }, 7500)
+    }, 20000)
 
     setPollingInterval(interval)
   }
@@ -594,9 +593,9 @@ export default function TravelPlannerPage() {
               <div className="space-y-6">
                 {/* Check if we have final_output with the structured data */}
                 {planState.final_output && (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
                     {/* Left side - Flight and Accommodation Cards */}
-                    <div className="lg:col-span-2 space-y-6">
+                    <div className="xl:col-span-3 space-y-6">
                       {(() => {
                         let travelData: TravelData | null = null;
                         
@@ -831,33 +830,33 @@ export default function TravelPlannerPage() {
                     </div>
 
                     {/* Right side - Summary */}
-                    <div className="lg:col-span-1">
+                    <div className="xl:col-span-2">
                       <div className="sticky top-4">
                         <div className="p-6 bg-gradient-to-br from-background/20 to-background/10 backdrop-blur-sm rounded-2xl border border-white/10">
                           <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
                             <Sparkles className="w-5 h-5" />
                             Trip Summary
                           </h3>
-                          <div className="prose prose-invert prose-sm max-w-none text-gray-300">
+                          <div className="prose prose-invert max-w-none text-gray-300">
                             <ReactMarkdown
                               components={{
-                                h1: ({children}) => <h1 className="text-lg font-bold text-white mb-2">{children}</h1>,
-                                h2: ({children}) => <h2 className="text-base font-semibold text-white mb-2">{children}</h2>,
-                                h3: ({children}) => <h3 className="text-sm font-semibold text-blue-300 mb-1">{children}</h3>,
-                                p: ({children}) => <p className="text-gray-300 mb-2 text-sm">{children}</p>,
+                                h1: ({children}) => <h1 className="text-xl font-bold text-white mb-3">{children}</h1>,
+                                h2: ({children}) => <h2 className="text-lg font-semibold text-white mb-2">{children}</h2>,
+                                h3: ({children}) => <h3 className="text-base font-semibold text-blue-300 mb-2">{children}</h3>,
+                                p: ({children}) => <p className="text-gray-300 mb-3 text-base leading-relaxed">{children}</p>,
                                 strong: ({children}) => <strong className="font-semibold text-blue-300">{children}</strong>,
                                 a: ({href, children}) => (
                                   <a 
                                     href={href} 
                                     target="_blank" 
                                     rel="noopener noreferrer" 
-                                    className="text-blue-400 hover:text-blue-300 underline break-all text-sm"
+                                    className="text-blue-400 hover:text-blue-300 underline break-all text-base"
                                   >
                                     {children}
                                   </a>
                                 ),
-                                ul: ({children}) => <ul className="list-disc list-inside mb-2 text-gray-300 text-sm">{children}</ul>,
-                                li: ({children}) => <li className="mb-1">{children}</li>,
+                                ul: ({children}) => <ul className="list-disc list-inside mb-3 text-gray-300 text-base">{children}</ul>,
+                                li: ({children}) => <li className="mb-2">{children}</li>,
                               }}
                             >
                               {(() => {
@@ -992,8 +991,25 @@ export default function TravelPlannerPage() {
   }
 
   return (
-    <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl">
+    <div className="min-h-screen gradient-bg flex flex-col items-center justify-center p-4">
+      {/* Header with title */}
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8 }}
+        className="w-full max-w-4xl mb-8"
+      >
+        <div className="text-center">
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent mb-2">
+            Unto
+          </h1>
+          <p className="text-lg text-muted-foreground/80">
+            Your AI Travel Companion ✈️
+          </p>
+        </div>
+      </motion.div>
+
+      <div className="w-full max-w-4xl">
         {/* Progress indicator */}
         <div className="mb-12">
           <div className="flex justify-between items-center mb-6">
@@ -1030,6 +1046,38 @@ export default function TravelPlannerPage() {
         <div className="backdrop-blur-sm bg-background/5 rounded-3xl p-12 border border-white/5 shadow-2xl">
           <AnimatePresence mode="wait">{renderStep()}</AnimatePresence>
         </div>
+
+        {/* Footer with branding */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          className="mt-8 text-center"
+        >
+          <div className="flex items-center justify-center gap-2 text-sm font-semibold text-muted-foreground/80">
+            <span>made by</span>
+            <a 
+              href="https://github.com/xkaper001" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:text-blue-300 transition-colors duration-200 flex items-center gap-1 hover:underline"
+            >
+              xkaper001
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <span>|</span>
+            <span>⚡️ by</span>
+            <a 
+              href="https://www.portialabs.ai/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-purple-400 hover:text-purple-300 transition-colors duration-200 flex items-center gap-1 hover:underline"
+            >
+              portia.ai
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        </motion.div>
       </div>
     </div>
   )
