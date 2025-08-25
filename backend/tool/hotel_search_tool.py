@@ -73,14 +73,4 @@ class AccomodationSearchTool(Tool[str]):
                 "price": "N/A",
                 "error": f"API call failed: {str(e)}"
             }])
-        except Exception as e:
-            # Return stub data if API call fails
-            return AccomodationOutputSchema(accommodations=[{
-                "location": location,
-                "check_in_date": check_in_date,
-                "check_out_date": check_out_date,
-                "guests": guests,
-                "price": "N/A",     
-                "note": "APIFY_API_TOKEN not configured - returning stub data"
-            }])
             

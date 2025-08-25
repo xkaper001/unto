@@ -9,7 +9,7 @@ class FlightInputSchema(BaseModel):
     """Schema for flight booking details."""
     origin: str = Field(..., description="The city from which the flight departs")
     destination: str = Field(..., description="The city to which the flight is headed")
-    departure_date: str = Field(..., description="The date of departure")
+    departure_date: str = Field(..., description="The date of departure in format YYYY-MM-DD")
     cabin_class: str = Field(..., description="The class of service for the flight. Can be any of (economy, business, first, premiumeconomy)")
     passengers: int = Field(..., description="The number of passengers traveling")
 

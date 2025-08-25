@@ -1,9 +1,8 @@
 import os
-from portia import Config, GenerativeModelsConfig, LLMProvider, LLMTool, LogLevel, Output, Plan, PlanRun, Portia, Step, StorageClass
+from portia import Config, ExecutionHooks, GenerativeModelsConfig, LLMProvider, LLMTool, LogLevel, Output, Plan, PlanRun, Portia, Step, StorageClass
 
 from tool.flight_search_tool import FlightSearchTool
 from tool.hotel_search_tool import AccomodationSearchTool
-from portia.cli import CLIExecutionHooks
 
 myTools = [
     FlightSearchTool(),
@@ -30,44 +29,22 @@ google_config = Config.from_default(
 
 def ws_after_hook(plan: Plan, plan_run: PlanRun, step: Step, output: Output):
     step_index = step.index if hasattr(step, 'index') else plan_run.current_step_index
-    print(f"WebSocket after hook triggered for plan: {plan.id}, run: {plan_run.id}, step: {step_index}, output type: {type(output)}")
+    print(f"Hook triggered for plan: {plan.id}, run: {plan_run.id}, step: {step_index}, output type: {type(output)}")
     
     # We'll set this function later to avoid circular imports
     if hasattr(ws_after_hook, 'notify_function') and hasattr(ws_after_hook, 'plan_state_store'):
         
-        # Safely serialize output
-        def serialize_output_safe(out):
-            try:
-                if hasattr(out, '__dict__'):
-                    result = {}
-                    for key, value in out.__dict__.items():
-                        try:
-                            import json
-                            json.dumps(value)
-                            result[key] = value
-                        except (TypeError, ValueError):
-                            result[key] = str(value)
-                    return result
-                else:
-                    return str(out)
-            except Exception:
-                return str(out)
+        # Create step output entry
+        step_output_name = f"step_{step_index}" if not hasattr(output, 'name') else output.name
         
-        # Create state object for WebSocket notification
-        state = {
-            "plan_run_id": plan_run.id,
-            "state": "IN_PROGRESS" if step_index < len(plan.steps) - 1 else "COMPLETE",
-            "current_step_index": step_index,
-            "outputs": serialize_output_safe(output),
+        step_outputs = {
+            step_output_name: {
+                "output_name": step_output_name,
+                "value": output.model_dump_json() if hasattr(output, 'model_dump_json') else str(output),
+                "summary": output.get_summary() if hasattr(output, 'get_summary') else (str(output)[:200] + "..." if len(str(output)) > 200 else str(output)),
+                "step_index": step_index
+            }
         }
-        
-        # If it's the final step, include final output
-        if step_index >= len(plan.steps) - 1:
-            state["final_output"] = serialize_output_safe(output)
-            state["state"] = "COMPLETE"
-        
-        # Update the plan state store - use both the Portia plan run ID and check for mapped original ID
-        ws_after_hook.plan_state_store[plan_run.id] = state
         
         # Find the original plan ID if it exists in the mapping
         original_plan_id = None
@@ -77,32 +54,44 @@ def ws_after_hook(plan: Plan, plan_run: PlanRun, step: Step, output: Output):
                     original_plan_id = orig_id
                     break
         
-        if original_plan_id:
-            # Update state with original plan ID for frontend consistency
-            state_for_original = state.copy()
-            state_for_original["plan_run_id"] = original_plan_id
-            ws_after_hook.plan_state_store[original_plan_id] = state_for_original
+        # Create state object for notification
+        state = {
+            "plan_run_id": original_plan_id if original_plan_id else plan_run.id,
+            "state": "IN_PROGRESS",
+            "current_step_index": step_index,
+            "outputs": {"step_outputs": step_outputs},
+        }
         
-        # Notify WebSocket clients - this needs to be async, so we'll use asyncio
-        import asyncio
-        try:
-            # Try to get the current event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're in an async context, create a task
-                asyncio.create_task(ws_after_hook.notify_function(plan_run.id, state))
-            else:
-                # If not, run it synchronously (shouldn't happen in FastAPI)
-                loop.run_until_complete(ws_after_hook.notify_function(plan_run.id, state))
-        except Exception as e:
-            print(f"Error in WebSocket notification: {e}")
+        # If it's the final step, include final output and mark as complete
+        if step_index >= len(plan.steps) - 1:
+            state["final_output"] = output.model_dump_json() if hasattr(output, 'model_dump_json') else str(output)
+            state["state"] = "COMPLETE"
         
-        print(f"Sent WebSocket update: step {step_index}, state: {state['state']}")
+        # Update the plan state store 
+        plan_id_to_use = original_plan_id if original_plan_id else plan_run.id
+        
+        # Merge with existing outputs if they exist
+        if plan_id_to_use in ws_after_hook.plan_state_store:
+            existing_state = ws_after_hook.plan_state_store[plan_id_to_use]
+            if "outputs" in existing_state and "step_outputs" in existing_state["outputs"]:
+                # Merge step outputs
+                existing_step_outputs = existing_state["outputs"]["step_outputs"]
+                existing_step_outputs.update(step_outputs)
+                state["outputs"]["step_outputs"] = existing_step_outputs
+        
+        ws_after_hook.plan_state_store[plan_id_to_use] = state
+        
+        # Store with Portia ID as well for consistency
+        ws_after_hook.plan_state_store[plan_run.id] = state
+        
+        # Call the simple notify function (no async needed)
+        ws_after_hook.notify_function(plan_id_to_use, state)
+        print(f"✅ Hook processed: step {step_index}, state: {state['state']}")
 
 myPortia = Portia(
     config=google_config,
     tools=myTools,
-    execution_hooks=CLIExecutionHooks(
+    execution_hooks=ExecutionHooks(
         after_step_execution=ws_after_hook
     )
 )

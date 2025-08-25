@@ -47,7 +47,7 @@ def travel_plan(
         - Return date: {return_date}
         - Cabin class: {cabin_class}
         - Number of passengers: {passengers}
-        Use any date respective to August 24 2025 or raise a clarification if a relative date is provided.
+        Use any date respective if a relative date is provided.
         Be sure to book both the departure and return flights.
         Analyse the flights and accommodation data and return the best flight overview with summary and Deeplink url to book and accommodation details with summary and url to book.
         The Deeplink url should be appended to https://www.skyscanner.co.in<CHOOSEN_DEEPLINK> before returning the response.
