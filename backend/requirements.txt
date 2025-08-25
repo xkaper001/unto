@@ -1,6 +1,0 @@
-apify-client>=2.0.0,
-dotenv>=0.9.9,
-fastapi>=0.116.1,
-portia-sdk-python[google]>=0.7.2,
-uvicorn>=0.30.0,
-websockets>=12.0,
