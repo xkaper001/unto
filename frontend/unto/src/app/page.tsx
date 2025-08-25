@@ -116,7 +116,7 @@ export default function TravelPlannerPage() {
   const pollPlanState = async (planRunId: string) => {
     try {
       console.log("🔍 Polling plan state for:", planRunId)
-      const response = await fetch(`http://localhost:8000/plan/${planRunId}/state`)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/plan/${planRunId}/state`)
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -231,7 +231,7 @@ export default function TravelPlannerPage() {
       console.log("🚀 Starting planning with form data:", formData)
       console.log("🔄 Processed form data:", processedFormData)
 
-      const response = await fetch("http://localhost:8000/plan/start", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/plan/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
