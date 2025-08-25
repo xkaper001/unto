@@ -1,4 +1,4 @@
-# Unto - AI-Powered Travel Planning Assistant
+# Unto - Your AI Travel Bestie
 
 Unto is an intelligent travel planning application that leverages AI to automatically search and recommend flights and accommodations for your travel needs. Built with modern web technologies and powered by the Portia AI framework, Unto provides a seamless experience for planning your next trip.
 
