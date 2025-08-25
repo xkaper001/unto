@@ -1043,7 +1043,7 @@ export default function TravelPlannerPage() {
           </div>
         </div>
 
-        <div className="backdrop-blur-sm bg-background/5 rounded-3xl p-12 border border-white/5 shadow-2xl">
+        <div className="backdrop-blur-sm bg-background/5 rounded-3xl p-12 border border-white/10 shadow-2xl">
           <AnimatePresence mode="wait">{renderStep()}</AnimatePresence>
         </div>
 
