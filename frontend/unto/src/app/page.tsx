@@ -18,12 +18,38 @@ interface TravelFormData {
   passengers: number
 }
 
+interface FlightData {
+  Airline: string
+  departTime: string
+  arrivalTime: string
+  price: number
+  deepLinkUrl?: string
+  [key: string]: unknown
+}
+
+interface AccommodationData {
+  HotelName: string
+  exact_location: string
+  checkInTime: string
+  checkOutTime: string
+  price: number
+  bookingUrl?: string
+  [key: string]: unknown
+}
+
+interface TravelData {
+  departureFlight?: FlightData
+  returnFlight?: FlightData
+  accommodation?: AccommodationData
+  [key: string]: unknown
+}
+
 interface PlanState {
   plan_run_id: string
   state: "PREPARING" | "IN_PROGRESS" | "COMPLETE" | "FAILED"
   current_step_index: number
-  outputs: any
-  final_output?: any
+  outputs: Record<string, unknown>
+  final_output?: Record<string, unknown> | string
   error?: string
 }
 
@@ -36,7 +62,7 @@ const steps = [
 ]
 
 // Helper function to convert JSON to readable markdown
-const jsonToMarkdown = (data: any): string => {
+const jsonToMarkdown = (data: unknown): string => {
   if (!data) return '';
   
   // If it's already a string, return it
@@ -45,7 +71,7 @@ const jsonToMarkdown = (data: any): string => {
   }
   
   // Convert object to formatted markdown
-  const formatValue = (value: any, depth: number = 0): string => {
+  const formatValue = (value: unknown, depth: number = 0): string => {
     const indent = '  '.repeat(depth);
     
     if (value === null || value === undefined) {
@@ -136,19 +162,19 @@ export default function TravelPlannerPage() {
       }
       
       // Log step outputs in detail if they exist
-      if (state.outputs?.final_output) {
+      if (state.outputs?.final_output && typeof state.outputs.final_output === 'object') {
         console.log("📋 Step outputs breakdown:")
-        Object.entries(state.outputs.final_output).forEach(([key, value], index) => {
+        Object.entries(state.outputs.final_output as Record<string, unknown>).forEach(([key, value], index) => {
           console.log(`  Step ${index + 1} (${key}):`, value)
           
           // Try to parse nested JSON strings with proper type checking
-          if (value && typeof value === 'object' && 'value' in value) {
-            const stepOutput = value as any
+          if (value && typeof value === 'object' && value !== null && 'value' in value) {
+            const stepOutput = value as Record<string, unknown>
             if (stepOutput.value && typeof stepOutput.value === 'string') {
               try {
                 const parsedValue = JSON.parse(stepOutput.value)
                 console.log(`  Step ${index + 1} parsed value:`, parsedValue)
-              } catch (e) {
+              } catch {
                 console.log(`  Step ${index + 1} value (string):`, stepOutput.value)
               }
             }
@@ -361,7 +387,7 @@ export default function TravelPlannerPage() {
                 When are you traveling?
               </h2>
               <p className="text-lg text-muted-foreground/80">
-                You can type naturally like "2 weeks later" or use specific dates
+                You can type naturally like &quot;2 weeks later&quot; or use specific dates
               </p>
             </div>
             <div className="space-y-8">
@@ -572,27 +598,28 @@ export default function TravelPlannerPage() {
                     {/* Left side - Flight and Accommodation Cards */}
                     <div className="lg:col-span-2 space-y-6">
                       {(() => {
-                        let travelData = null;
+                        let travelData: TravelData | null = null;
                         
                         // Extract the travel data from final_output
                         if (typeof planState.final_output === 'string') {
                           try {
                             travelData = JSON.parse(planState.final_output);
-                          } catch (e) {
+                          } catch {
                             console.log('Failed to parse final_output string');
                           }
-                        } else if (planState.final_output.value) {
-                          if (typeof planState.final_output.value === 'string') {
+                        } else if (planState.final_output && typeof planState.final_output === 'object' && 'value' in planState.final_output) {
+                          const finalOutput = planState.final_output as { value: unknown };
+                          if (typeof finalOutput.value === 'string') {
                             try {
-                              travelData = JSON.parse(planState.final_output.value);
-                            } catch (e) {
+                              travelData = JSON.parse(finalOutput.value);
+                            } catch {
                               console.log('Failed to parse final_output.value string');
                             }
                           } else {
-                            travelData = planState.final_output.value;
+                            travelData = finalOutput.value as TravelData;
                           }
                         } else {
-                          travelData = planState.final_output;
+                          travelData = planState.final_output as TravelData;
                         }
                         
                         if (!travelData) return null;
@@ -835,27 +862,28 @@ export default function TravelPlannerPage() {
                             >
                               {(() => {
                                 // Extract summary from final_output if it exists
-                                if (planState.final_output?.summary) {
-                                  return planState.final_output.summary;
+                                if (typeof planState.final_output === 'object' && planState.final_output !== null && 'summary' in planState.final_output) {
+                                  return (planState.final_output as { summary: string }).summary;
                                 }
                                 
                                 // Generate a summary from the travel data
-                                let travelData = null;
+                                let travelData: TravelData | null = null;
                                 if (typeof planState.final_output === 'string') {
                                   try {
                                     travelData = JSON.parse(planState.final_output);
-                                  } catch (e) {
+                                  } catch {
                                     return jsonToMarkdown(planState.final_output);
                                   }
-                                } else if (planState.final_output?.value) {
-                                  if (typeof planState.final_output.value === 'string') {
+                                } else if (planState.final_output && typeof planState.final_output === 'object' && 'value' in planState.final_output) {
+                                  const finalOutput = planState.final_output as { value: unknown };
+                                  if (typeof finalOutput.value === 'string') {
                                     try {
-                                      travelData = JSON.parse(planState.final_output.value);
-                                    } catch (e) {
-                                      return planState.final_output.value;
+                                      travelData = JSON.parse(finalOutput.value);
+                                    } catch {
+                                      return finalOutput.value;
                                     }
                                   } else {
-                                    travelData = planState.final_output.value;
+                                    travelData = finalOutput.value as TravelData;
                                   }
                                 }
                                 
