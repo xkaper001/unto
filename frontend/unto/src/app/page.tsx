@@ -54,11 +54,11 @@ interface PlanState {
 }
 
 const steps = [
-  { id: "destination", title: "Destination", icon: MapPin },
-  { id: "dates", title: "Travel Dates", icon: Calendar },
-  { id: "details", title: "Flight Details", icon: Plane },
-  { id: "processing", title: "Planning", icon: Loader2 },
-  { id: "results", title: "Results", icon: Users },
+  { id: "destination", title: "Where to?", icon: MapPin },
+  { id: "dates", title: "When tho?", icon: Calendar },
+  { id: "details", title: "Vibes Check", icon: Plane },
+  { id: "processing", title: "Cookin'", icon: Loader2 },
+  { id: "results", title: "It's Giving", icon: Users },
 ]
 
 // Helper function to convert JSON to readable markdown
@@ -312,9 +312,9 @@ export default function TravelPlannerPage() {
                 <MapPin className="w-8 h-8 text-primary" />
               </motion.div>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Where are you traveling?
+                Where we droppin'?
               </h1>
-              <p className="text-lg text-muted-foreground/80">Tell us your departure and destination cities</p>
+              <p className="text-lg text-muted-foreground/80">Spill the tea on your departure and destination cities bestie</p>
             </div>
             <div className="space-y-8">
               <motion.div
@@ -325,7 +325,7 @@ export default function TravelPlannerPage() {
               >
                 <label className="text-sm font-medium text-muted-foreground/60 uppercase tracking-wider">From</label>
                 <Input
-                  placeholder="Enter departure city"
+                  placeholder="From where tho?"
                   value={formData.origin}
                   onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
                   className="h-16 text-xl bg-transparent border-0 border-b-2 border-muted-foreground/20 rounded-none focus:border-primary focus:bg-transparent transition-all duration-500 placeholder:text-muted-foreground/40"
@@ -339,7 +339,7 @@ export default function TravelPlannerPage() {
               >
                 <label className="text-sm font-medium text-muted-foreground/60 uppercase tracking-wider">To</label>
                 <Input
-                  placeholder="Enter destination city"
+                  placeholder="Destination please ✨"
                   value={formData.destination}
                   onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
                   className="h-16 text-xl bg-transparent border-0 border-b-2 border-muted-foreground/20 rounded-none focus:border-primary focus:bg-transparent transition-all duration-500 placeholder:text-muted-foreground/40"
@@ -358,7 +358,7 @@ export default function TravelPlannerPage() {
                 size="lg"
                 className="bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 text-white px-8 py-3 rounded-full transition-all duration-300 disabled:opacity-50"
               >
-                Continue <ArrowRight className="ml-2 w-5 h-5" />
+                Let's gooo! <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
             </motion.div>
           </motion.div>
@@ -383,10 +383,10 @@ export default function TravelPlannerPage() {
                 <Calendar className="w-8 h-8 text-primary" />
               </motion.div>
               <h2 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                When are you traveling?
+                When we jettin'?
               </h2>
               <p className="text-lg text-muted-foreground/80">
-                You can type naturally like &quot;2 weeks later&quot; or use specific dates
+                Drop your dates bestie - you can be like &quot;2 weeks later&quot; or get specific
               </p>
             </div>
             <div className="space-y-8">
@@ -397,7 +397,7 @@ export default function TravelPlannerPage() {
                 className="space-y-3"
               >
                 <label className="text-sm font-medium text-muted-foreground/60 uppercase tracking-wider">
-                  Departure Date
+                  When we leavin'?
                 </label>
                 <Input
                   placeholder="e.g., 2 weeks later, March 15, 2025-03-15"
@@ -413,7 +413,7 @@ export default function TravelPlannerPage() {
                 className="space-y-3"
               >
                 <label className="text-sm font-medium text-muted-foreground/60 uppercase tracking-wider">
-                  Return Date
+                  When we comin' back?
                 </label>
                 <Input
                   placeholder="e.g., 3 weeks later, March 22, 2025-03-22"
@@ -430,7 +430,7 @@ export default function TravelPlannerPage() {
               className="flex gap-4"
             >
               <Button variant="ghost" onClick={prevStep} className="flex-1 text-muted-foreground hover:text-foreground">
-                Back
+                Nah, go back
               </Button>
               <Button
                 onClick={nextStep}
@@ -438,7 +438,7 @@ export default function TravelPlannerPage() {
                 size="lg"
                 className="flex-1 bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 text-white rounded-full transition-all duration-300"
               >
-                Continue <ArrowRight className="ml-2 w-5 h-5" />
+                Bet, let's continue <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
             </motion.div>
           </motion.div>
@@ -463,9 +463,9 @@ export default function TravelPlannerPage() {
                 <Plane className="w-8 h-8 text-primary" />
               </motion.div>
               <h2 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Flight preferences
+                What's the vibe check?
               </h2>
-              <p className="text-lg text-muted-foreground/80">Choose your cabin class and number of passengers</p>
+              <p className="text-lg text-muted-foreground/80">Pick your cabin class and squad size fr</p>
             </div>
             <div className="space-y-8">
               <motion.div
@@ -475,7 +475,7 @@ export default function TravelPlannerPage() {
                 className="space-y-3"
               >
                 <label className="text-sm font-medium text-muted-foreground/60 uppercase tracking-wider">
-                  Cabin Class
+                  How we flyin'?
                 </label>
                 <Select
                   value={formData.cabin_class}
@@ -499,7 +499,7 @@ export default function TravelPlannerPage() {
                 className="space-y-3"
               >
                 <label className="text-sm font-medium text-muted-foreground/60 uppercase tracking-wider">
-                  Number of Passengers
+                  Squad size?
                 </label>
                 <Select
                   value={formData.passengers.toString()}
@@ -511,7 +511,7 @@ export default function TravelPlannerPage() {
                   <SelectContent>
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
                       <SelectItem key={num} value={num.toString()}>
-                        {num} {num === 1 ? "Passenger" : "Passengers"}
+                        {num} {num === 1 ? "Person" : "People"}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -525,14 +525,14 @@ export default function TravelPlannerPage() {
               className="flex gap-4"
             >
               <Button variant="ghost" onClick={prevStep} className="flex-1 text-muted-foreground hover:text-foreground">
-                Back
+                Nah, go back
               </Button>
               <Button
                 onClick={startPlanning}
                 size="lg"
                 className="flex-1 bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 text-white rounded-full transition-all duration-300 animate-pulse"
               >
-                Start Planning <Sparkles className="ml-2 w-5 h-5" />
+                LFG! Start Planning <Sparkles className="ml-2 w-5 h-5" />
               </Button>
             </motion.div>
           </motion.div>
@@ -555,10 +555,10 @@ export default function TravelPlannerPage() {
                 <Loader2 className="w-10 h-10 text-primary" />
               </motion.div>
               <h2 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Planning your perfect trip
+                Hold up, we're cookin' something fire 🔥
               </h2>
               <p className="text-lg text-muted-foreground/80">
-                Our AI is searching for the best flights and accommodations...
+                Our AI is out here finding the most elite flights and stays...
               </p>
             </div>
             {planState && (
@@ -568,7 +568,7 @@ export default function TravelPlannerPage() {
                 </div>
                 {planState.state === "IN_PROGRESS" && (
                   <div className="text-sm text-muted-foreground/60">
-                    Step {planState.current_step_index + 1} in progress...
+                    Step {planState.current_step_index + 1} - Still cookin'... 👨‍🍳
                   </div>
                 )}
               </motion.div>
@@ -585,8 +585,8 @@ export default function TravelPlannerPage() {
             className="space-y-8"
           >
             <div className="text-center space-y-2">
-              <h2 className="text-3xl font-bold">Your travel plan is ready!</h2>
-              <p className="text-muted-foreground">Here are the best options we found for you</p>
+              <h2 className="text-3xl font-bold">Bestie, your trip is READY! ✨</h2>
+              <p className="text-muted-foreground">These are the absolute best options we found for you, no cap 💯</p>
             </div>
 
             {planState?.state === "COMPLETE" && (
@@ -630,7 +630,7 @@ export default function TravelPlannerPage() {
                               <div className="p-6 bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-sm rounded-2xl border border-blue-500/20">
                                 <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-blue-400">
                                   <Plane className="w-6 h-6" />
-                                  Departure Flight
+                                  Outbound Flight ✈️
                                 </h3>
                                 <div className="space-y-3">
                                   <div className="flex justify-between items-center">
@@ -672,7 +672,7 @@ export default function TravelPlannerPage() {
                                         target="_blank"
                                         rel="noopener noreferrer"
                                       >
-                                        Book Departure Flight
+                                        Book This Flight! 🚀
                                         <ArrowRight className="w-4 h-4 ml-2" />
                                       </a>
                                     </Button>
@@ -686,7 +686,7 @@ export default function TravelPlannerPage() {
                               <div className="p-6 bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-sm rounded-2xl border border-purple-500/20">
                                 <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-purple-400">
                                   <Plane className="w-6 h-6 rotate-180" />
-                                  Return Flight
+                                  Return Flight 🏠
                                 </h3>
                                 <div className="space-y-3">
                                   <div className="flex justify-between items-center">
@@ -728,7 +728,7 @@ export default function TravelPlannerPage() {
                                         target="_blank"
                                         rel="noopener noreferrer"
                                       >
-                                        Book Return Flight
+                                        Secure the Return! 🎫
                                         <ArrowRight className="w-4 h-4 ml-2" />
                                       </a>
                                     </Button>
@@ -742,7 +742,7 @@ export default function TravelPlannerPage() {
                               <div className="p-6 bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-sm rounded-2xl border border-green-500/20">
                                 <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-green-400">
                                   <MapPin className="w-6 h-6" />
-                                  Accommodation
+                                  Your Luxury Stay 🏨
                                 </h3>
                                 <div className="space-y-3">
                                   <div>
@@ -777,7 +777,7 @@ export default function TravelPlannerPage() {
                                         target="_blank"
                                         rel="noopener noreferrer"
                                       >
-                                        Book Accommodation
+                                        Book This Stay! 🏡
                                         <ArrowRight className="w-4 h-4 ml-2" />
                                       </a>
                                     </Button>
@@ -791,7 +791,7 @@ export default function TravelPlannerPage() {
                               <div className="p-6 bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 backdrop-blur-sm rounded-2xl border border-yellow-500/20">
                                 <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-yellow-400">
                                   <Sparkles className="w-6 h-6" />
-                                  Total Trip Cost
+                                  Total Damage 💸
                                 </h3>
                                 <div className="space-y-2">
                                   {travelData.departureFlight && (
@@ -835,7 +835,7 @@ export default function TravelPlannerPage() {
                         <div className="p-6 bg-gradient-to-br from-background/20 to-background/10 backdrop-blur-sm rounded-2xl border border-white/10">
                           <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
                             <Sparkles className="w-5 h-5" />
-                            Trip Summary
+                            The Tea ☕
                           </h3>
                           <div className="prose prose-invert max-w-none text-gray-300">
                             <ReactMarkdown
@@ -952,9 +952,9 @@ export default function TravelPlannerPage() {
 
             {planState?.state === "FAILED" && (
               <div className="p-6 bg-gradient-to-br from-red-500/10 to-red-600/5 backdrop-blur-sm rounded-2xl border border-red-500/20">
-                <h3 className="text-xl font-semibold text-red-400 mb-2">Planning Failed</h3>
+                <h3 className="text-xl font-semibold text-red-400 mb-2">Oop, that's not it chief 💀</h3>
                 <p className="text-muted-foreground">
-                  {planState.error || "An error occurred while planning your trip."}
+                  {planState.error || "Something went wrong while we were cooking your trip 😔"}
                 </p>
               </div>
             )}
@@ -980,7 +980,7 @@ export default function TravelPlannerPage() {
               }}
               className="w-full"
             >
-              Plan Another Trip
+              Plan Another Trip 🌟
             </Button>
           </motion.div>
         )
@@ -1004,7 +1004,7 @@ export default function TravelPlannerPage() {
             Unto
           </h1>
           <p className="text-lg text-muted-foreground/80">
-            Your AI Travel Companion ✈️
+            Your AI Travel Bestie ✈️💎
           </p>
         </div>
       </motion.div>
