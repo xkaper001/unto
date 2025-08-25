@@ -13,6 +13,8 @@ Unto is an intelligent travel planning application that leverages AI to automati
 
 ## 🏗️ Architecture
 
+<img width="2171" height="1510" alt="image" src="https://github.com/user-attachments/assets/2d5c2771-1ac5-4765-828f-68dc975b9c52" />
+
 Unto consists of two main components:
 
 ### Backend (FastAPI + Portia)
