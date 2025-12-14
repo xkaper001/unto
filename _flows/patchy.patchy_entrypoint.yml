@@ -1,0 +1,153 @@
+id: patchy_entrypoint
+namespace: patchy
+
+tasks:
+  - id: log_incoming
+    type: io.kestra.plugin.core.log.Log
+    level: INFO
+    message: |
+      Incoming GitHub event {{ trigger.headers['X-GitHub-Event'][0] }} for {{ trigger.body.repository.full_name ?? 'unknown' }}
+
+  - id: save_installation_id
+    type: io.kestra.plugin.core.kv.Set
+    namespace: patchy
+    key: "IID_{{ trigger.body.installation.id }}"
+    value: "{{ trigger.body.installation.id }}"
+    runIf: "{{ (trigger.body.action ?? 'nope') == 'created' }}"
+
+  - id: debug_body
+    type: io.kestra.plugin.core.debug.Return
+    format: "{{ trigger.body }}"
+
+  - id: check_patchy_mention
+    type: io.kestra.plugin.scripts.python.Script
+    script: |
+      import json
+      from kestra import Kestra
+
+      # Read directly from trigger body to avoid depending on built context
+      raw_body = """{{ trigger.body | jq('.comment.body') | first | default('') }}"""
+      should_run = "@patchyai" in raw_body.lower()
+      Kestra.outputs({"should_run": should_run})
+    dependencies:
+      - Kestra
+
+  # 1) Build a compact event context passed to the AI
+  - id: build_event_context
+    type: io.kestra.plugin.scripts.python.Script
+    dependencies:
+      - kestra
+    script: |
+      import json
+      from kestra import Kestra
+
+      # All values passed via environment variables as strings
+      event_type = """{{ trigger.headers['X-GitHub-Event'][0] }}"""
+      repo_full_name = """{{ trigger.body | jq('.repository.full_name') | first }}"""
+      repo_private = """{{ trigger.body | jq('.repository.private') | first }}"""
+      install_id = """{{ trigger.body | jq('.installation.id') | first }}"""
+      sender_login = """{{ trigger.body | jq('.sender.login') | first }}"""
+
+      # Keep only the useful parts to avoid blowing up context
+      ctx = {
+          "event_type": event_type, 
+          "repository": {
+              "full_name": repo_full_name if repo_full_name != "null" else None,
+              "private": repo_private == "true",
+          },
+          "installation": {
+              "id": int(install_id) if install_id != "null" else None,
+              "account": sender_login if sender_login != "null" else None,
+          },
+      }
+
+      if event_type == "push":
+          ctx["ref"] = """{{ trigger.body | jq('.ref') | first }}"""
+          ctx["pusher"] = """{{ trigger.body | jq('.pusher.name') | first }}"""
+      elif event_type == "issue_comment":
+          issue_number_raw = """{{ trigger.body | jq('.issue.number') | first }}"""
+          ctx["comment"] = {
+              "body": """{{ trigger.body | jq('.comment.body') | first }}""",
+              "user": """{{ trigger.body | jq('.comment.user.login') | first }}""",
+              "issue_number": int(issue_number_raw) if issue_number_raw != "null" else None,
+          }
+      elif event_type == "pull_request":
+          ctx["pull_request"] = {
+              "number": """{{ trigger.body | jq('.pull_request.number') | first }}""",
+              "state": """{{ trigger.body | jq('.pull_request.state') | first }}""",
+              "title": """{{ trigger.body | jq('.pull_request.title') | first }}""",
+              "user": """{{ trigger.body | jq('.pull_request.user.login') | first }}""",
+          }
+      Kestra.outputs({"event_context": ctx})
+  - id: ai_decide
+    type: io.kestra.plugin.ai.agent.AIAgent
+    runIf: "{{ outputs.check_patchy_mention.vars.should_run == true }}"
+    prompt: |
+      You are Patchy, an automation agent for GitHub repositories.
+
+      Your task is to EXECUTE exactly ONE Kestra flow based on the user's comment.
+
+      Available flows (namespace: patchy):
+      - create_comment
+      - vulnerability_scan_and_comment
+      - vulnerability_fix
+
+      Decision rules:
+      - If the user greets you or asks general questions → execute create_comment
+      - If the user asks to scan the repository → execute vulnerability_scan_and_comment
+      - If the user approves fixes after a scan → execute vulnerability_fix
+      - If no action is required → DO NOT execute any flow
+
+      Flow input requirements:
+
+      create_comment:
+        - repository (string)
+        - installation_id (string)
+        - issue_number (int)
+        - comment_body (string)
+
+      vulnerability_scan_and_comment:
+        - repository (string)
+        - installation_id (string)
+        - issue_number (int)
+
+      vulnerability_fix:
+        - repository (string) 
+        - installation_id (string)
+        - scan_report (file uri)
+        - fix_scope (string, optional)
+
+      Context:
+      {{ outputs.build_event_context.vars.event_context | json }}
+
+      IMPORTANT:
+      - You MUST call a flow if you respond.
+      - Do NOT reply in plain text.
+      - Do NOT explain your reasoning.
+      - Return ONLY the execution result of the flow.
+    provider:
+      type: io.kestra.plugin.ai.provider.GoogleGemini
+      modelName: gemini-2.5-flash-lite
+      apiKey: "{{ kv('API_GEMINI_' ~ trigger.body.installation.id) }}"
+    tools:
+      - type: io.kestra.plugin.ai.tool.KestraFlow
+    memory:
+      type: io.kestra.plugin.ai.memory.Redis
+      host: redis
+      memoryId: "{{ (trigger.body.repository is defined and trigger.body.repository.id is defined) ? ((trigger.body.sender.id ?? 'user') ~ '_' ~ trigger.body.repository.id) : (trigger.body.sender.id ?? 'default') }}"
+      messages: 100
+
+  - id: execution_uri
+    type: io.kestra.plugin.core.debug.Return
+    runIf: "{{ outputs.ai_decide.toolExecutions | length > 0 }}"
+    format: "{{ (kestra.url ?? 'http://localhost:8080/') ~ 'ui/' ~ fromJson((outputs.ai_decide.toolExecutions | first).result).tenantId ~ '/executions/patchy/' ~ fromJson((outputs.ai_decide.toolExecutions | first).result).flowId ~ '/' ~ fromJson((outputs.ai_decide.toolExecutions | first).result).id }}"
+
+  - id: skip_log
+    type: io.kestra.plugin.core.log.Log
+    runIf: "{{ outputs.check_patchy_mention.vars.should_run == false }}"
+    message: "No @patchyai mention found. Skipping."
+
+triggers:
+  - id: hook
+    type: io.kestra.plugin.core.trigger.Webhook
+    key: patchy_test
