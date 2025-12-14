@@ -1,0 +1,18 @@
+id: set_gemini_api_key
+namespace: patchy
+description: |
+  Stores a Gemini API key in Kestra KV for a specific GitHub App installation.
+  This enables per-installation API key isolation.
+
+tasks:
+  - id: set_key
+    type: io.kestra.plugin.core.kv.Set
+    namespace: patchy
+    runIf: "{{ trigger.body.installation_id is not null and trigger.body.api_key is not null }}"
+    key: "API_GEMINI_{{ trigger.body.installation_id }}"
+    value: "{{ trigger.body.api_key }}"
+
+triggers:
+  - id: webhook
+    type: io.kestra.plugin.core.trigger.Webhook
+    key: set_gemini_api_key
